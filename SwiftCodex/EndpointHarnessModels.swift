@@ -133,7 +133,7 @@ enum EndpointRequestFactory {
                 "sortKey": .string("created_at")
             ])
         case .threadLoadedList:
-            return nil
+            return .object([:])
         case .threadRead:
             return .object([
                 "threadId": .string(threadID),
@@ -214,7 +214,7 @@ enum EndpointRequestFactory {
                 "limit": .number(50)
             ])
         case .collaborationModeList:
-            return nil
+            return .object([:])
         case .skillsList:
             return .object([
                 "forceReload": .bool(false)
@@ -276,7 +276,7 @@ enum EndpointRequestFactory {
                 "reason": .string("UI endpoint harness test")
             ])
         case .configRead:
-            return nil
+            return .object([:])
         case .configValueWrite:
             return .object([
                 "key": .string("model"),

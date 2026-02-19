@@ -30,8 +30,7 @@ struct ContentView: View {
     }
 
     private var selectedLogEntry: EndpointLogEntry? {
-        guard let selectedLogID else { return nil }
-        return appModel.logs.first(where: { $0.id == selectedLogID })
+        appModel.logEntry(id: selectedLogID)
     }
 
     var body: some View {
@@ -307,7 +306,7 @@ struct ContentView: View {
             HStack(alignment: .top, spacing: 10) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(Array(appModel.logs.reversed())) { entry in
+                        ForEach(appModel.logsNewestFirst) { entry in
                             logRow(entry)
                         }
                     }

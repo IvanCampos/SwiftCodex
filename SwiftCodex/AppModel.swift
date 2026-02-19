@@ -28,72 +28,81 @@ class AppModel {
     }
     var immersiveSpaceState = ImmersiveSpaceState.closed
 
-    var webSocketURL = defaultWebSocketURL
-    var connectionState: EndpointConnectionState = .disconnected
-    var isInitialized = false
     var selectedEndpoint: AppServerMethod?
-    var lastRequestJSON = ""
-    var lastResponseJSON = ""
     var logs: [EndpointLogEntry] = []
+    var logsNewestFirst: [EndpointLogEntry] = []
     var activeThreadID: String?
     var activeTurnID: String?
 
-    private var endpointClient: CodexAppServerClient?
-    private var inboundListenerTask: Task<Void, Never>?
+    private let maxLogCount = 300
+    private var logByID: [EndpointLogEntry.ID: EndpointLogEntry] = [:]
+
+    @ObservationIgnored
+    private let endpointSession: EndpointSessionService
+
+    init() {
+        endpointSession = EndpointSessionService(webSocketURL: Self.defaultWebSocketURL)
+        endpointSession.onInboundMessage = { [weak self] message in
+            self?.handleInboundMessage(message)
+        }
+    }
+
+    var webSocketURL: String {
+        get { endpointSession.webSocketURL }
+        set { endpointSession.webSocketURL = newValue }
+    }
+
+    var connectionState: EndpointConnectionState {
+        endpointSession.connectionState
+    }
+
+    var isInitialized: Bool {
+        endpointSession.isInitialized
+    }
+
+    var lastRequestJSON: String {
+        get { endpointSession.lastRequestJSON }
+        set { endpointSession.lastRequestJSON = newValue }
+    }
+
+    var lastResponseJSON: String {
+        get { endpointSession.lastResponseJSON }
+        set { endpointSession.lastResponseJSON = newValue }
+    }
 
     var isEndpointConnected: Bool {
-        if case .connected = connectionState {
-            return true
-        }
-        return false
+        endpointSession.isConnected
     }
 
     func connectEndpointWebSocket() async {
-        disconnectEndpointClient()
-        connectionState = .connecting
-
-        guard let url = URL(string: webSocketURL),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "ws" || scheme == "wss" else {
-            connectionState = .failed("Invalid websocket URL.")
-            appendLifecycleLog("Connect failed: invalid websocket URL '\(webSocketURL)'.")
-            return
+        if endpointSession.isConnected {
+            appendLifecycleLog("Disconnected from app-server.")
         }
 
-        let client = CodexAppServerClient()
+        await endpointSession.connect()
 
-        do {
-            try await client.connectWebSocket(url: url)
-            endpointClient = client
-            connectionState = .connected
-            isInitialized = false
-            appendLifecycleLog("Connected to \(webSocketURL).")
-            startInboundListener(for: client)
-        } catch {
-            endpointClient = nil
-            let (_, message, _) = formattedErrorPayload(error)
-            connectionState = .failed(message)
+        switch endpointSession.connectionState {
+        case .connected:
+            appendLifecycleLog("Connected to \(endpointSession.webSocketURL).")
+        case .failed(let message):
             appendLifecycleLog("Connect failed: \(message)")
+        default:
+            break
         }
     }
 
     func disconnectEndpointClient() {
-        inboundListenerTask?.cancel()
-        inboundListenerTask = nil
-
-        endpointClient?.disconnect()
-        endpointClient = nil
-
-        if case .connected = connectionState {
+        if endpointSession.isConnected {
             appendLifecycleLog("Disconnected from app-server.")
         }
 
-        connectionState = .disconnected
-        isInitialized = false
+        endpointSession.disconnect()
     }
 
     func clearEndpointLogs() {
         logs.removeAll()
+        logsNewestFirst.removeAll()
+        logByID.removeAll()
         lastRequestJSON = ""
         lastResponseJSON = ""
         selectedEndpoint = nil
@@ -107,97 +116,33 @@ class AppModel {
             activeThreadID: activeThreadID,
             activeTurnID: activeTurnID
         )
-        let requestJSON = EndpointJSONFormatter.requestJSON(method: method.rawValue, params: params)
-        lastRequestJSON = requestJSON
+        let invocation = await endpointSession.invoke(method: method, params: params)
 
-        guard let endpointClient else {
-            let notConnected = EndpointJSONFormatter.genericErrorJSON("Not connected to app-server.")
-            lastResponseJSON = notConnected
-            appendLog(
-                EndpointLogEntry(
-                    timestamp: Date(),
-                    kind: .requestResponse,
-                    method: method.rawValue,
-                    requestJSON: requestJSON,
-                    responseJSON: notConnected,
-                    success: false,
-                    latencyMs: nil,
-                    errorCode: nil,
-                    errorMessage: "Not connected."
-                )
-            )
-            return
-        }
-
-        let startedAt = Date()
-
-        do {
-            let result = try await endpointClient.callRaw(method: method.rawValue, params: params)
-            var initializedNotificationSent = false
-
-            if method == .initialize {
-                try endpointClient.sendNotification(method: "initialized")
-                isInitialized = true
-                initializedNotificationSent = true
-            }
-
+        if let result = invocation.result {
             syncTrackingIDs(from: method, result: result)
-
-            let responseJSON = EndpointJSONFormatter.responseJSON(
-                result: result,
-                initializationAcknowledged: initializedNotificationSent
-            )
-            lastResponseJSON = responseJSON
-
-            appendLog(
-                EndpointLogEntry(
-                    timestamp: Date(),
-                    kind: .requestResponse,
-                    method: method.rawValue,
-                    requestJSON: requestJSON,
-                    responseJSON: responseJSON,
-                    success: true,
-                    latencyMs: Int(Date().timeIntervalSince(startedAt) * 1000),
-                    errorCode: nil,
-                    errorMessage: nil
-                )
-            )
-        } catch {
-            let (errorCode, errorMessage, errorJSON) = formattedErrorPayload(error)
-            lastResponseJSON = errorJSON
-
-            appendLog(
-                EndpointLogEntry(
-                    timestamp: Date(),
-                    kind: .requestResponse,
-                    method: method.rawValue,
-                    requestJSON: requestJSON,
-                    responseJSON: errorJSON,
-                    success: false,
-                    latencyMs: Int(Date().timeIntervalSince(startedAt) * 1000),
-                    errorCode: errorCode,
-                    errorMessage: errorMessage
-                )
-            )
         }
+
+        appendLog(
+            EndpointLogEntry(
+                timestamp: Date(),
+                kind: .requestResponse,
+                method: invocation.method,
+                requestJSON: invocation.requestJSON,
+                responseJSON: invocation.responseJSON,
+                success: invocation.success,
+                latencyMs: invocation.latencyMs,
+                errorCode: invocation.errorCode,
+                errorMessage: invocation.errorMessage
+            )
+        )
     }
 
-    private func startInboundListener(for client: CodexAppServerClient) {
-        inboundListenerTask?.cancel()
-        inboundListenerTask = Task { [weak self] in
-            guard let self else { return }
-
-            for await inboundMessage in client.inboundMessages {
-                self.handleInboundMessage(inboundMessage, from: client)
-            }
-        }
+    func logEntry(id: EndpointLogEntry.ID?) -> EndpointLogEntry? {
+        guard let id else { return nil }
+        return logByID[id]
     }
 
-    private func handleInboundMessage(_ message: AppServerInboundMessage, from sourceClient: CodexAppServerClient) {
-        guard endpointClient === sourceClient else {
-            return
-        }
-
+    private func handleInboundMessage(_ message: AppServerInboundMessage) {
         switch message {
         case .notification(let notification):
             let payload = EndpointJSONFormatter.pretty(notification.params ?? .object([:]))
@@ -244,11 +189,6 @@ class AppModel {
                 )
             )
         case .disconnected(let exitCode):
-            endpointClient = nil
-            inboundListenerTask?.cancel()
-            inboundListenerTask = nil
-            connectionState = .disconnected
-            isInitialized = false
             appendLifecycleLog("Connection closed (exit code: \(exitCode.map(String.init) ?? "n/a")).")
         }
     }
@@ -271,8 +211,18 @@ class AppModel {
 
     private func appendLog(_ entry: EndpointLogEntry) {
         logs.append(entry)
-        if logs.count > 300 {
-            logs.removeFirst(logs.count - 300)
+        logsNewestFirst.insert(entry, at: 0)
+        logByID[entry.id] = entry
+
+        if logs.count > maxLogCount {
+            let overflow = logs.count - maxLogCount
+            let removedEntries = logs.prefix(overflow)
+            logs.removeFirst(overflow)
+            logsNewestFirst.removeLast(min(overflow, logsNewestFirst.count))
+
+            for removedEntry in removedEntries {
+                logByID.removeValue(forKey: removedEntry.id)
+            }
         }
     }
 
@@ -294,47 +244,5 @@ class AppModel {
         if method == .reviewStart, let reviewThreadID = payload["reviewThreadId"]?.stringValue {
             activeThreadID = reviewThreadID
         }
-    }
-
-    private func formattedErrorPayload(_ error: Error) -> (Int?, String, String) {
-        if let codexError = error as? CodexAppServerError {
-            switch codexError {
-            case .rpc(let rpcError):
-                return (
-                    rpcError.code,
-                    rpcError.message,
-                    EndpointJSONFormatter.rpcErrorJSON(
-                        code: rpcError.code,
-                        message: rpcError.message,
-                        data: rpcError.data
-                    )
-                )
-            case .unsupportedPlatform(let message):
-                return (nil, message, EndpointJSONFormatter.genericErrorJSON(message))
-            case .terminated(let code):
-                let message = "Connection terminated (exit code: \(code))."
-                return (nil, message, EndpointJSONFormatter.genericErrorJSON(message))
-            case .invalidWebSocketURL(let message),
-                 .websocketHandshakeFailed(let message),
-                 .websocketProtocolViolation(let message):
-                return (nil, message, EndpointJSONFormatter.genericErrorJSON(message))
-            default:
-                let message = String(describing: codexError)
-                return (nil, message, EndpointJSONFormatter.genericErrorJSON(message))
-            }
-        }
-
-        if let posixError = error as? POSIXError {
-            if posixError.code == .ECONNREFUSED {
-                let message = """
-                Connection refused at \(webSocketURL). Start app-server first: codex app-server --listen ws://0.0.0.0:4500. \
-                If running in Simulator on the same Mac, use ws://127.0.0.1:4500.
-                """
-                return (nil, message, EndpointJSONFormatter.genericErrorJSON(message))
-            }
-        }
-
-        let message = error.localizedDescription
-        return (nil, message, EndpointJSONFormatter.genericErrorJSON(message))
     }
 }

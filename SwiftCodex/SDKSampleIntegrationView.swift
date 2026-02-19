@@ -4,34 +4,65 @@ import CodexAppServerSDK
 @MainActor
 @Observable
 final class SDKSampleIntegrationModel {
-    var serverURL: String = AppModel.defaultWebSocketURL
-    var connectionStatusText: String = "Disconnected"
-    var isConnected = false
     var isBusy = false
 
     var modelIDs: [String] = []
-    var requestJSON = ""
-    var responseJSON = ""
     var events: [String] = []
 
-    private let client = CodexAppServerClient()
-    private var inboundTask: Task<Void, Never>?
+    private let session: EndpointSessionService
+
+    init() {
+        session = EndpointSessionService(webSocketURL: AppModel.defaultWebSocketURL)
+        session.onInboundMessage = { [weak self] message in
+            self?.handleInboundMessage(message)
+        }
+    }
+
+    var serverURL: String {
+        get { session.webSocketURL }
+        set { session.webSocketURL = newValue }
+    }
+
+    var connectionStatusText: String {
+        switch session.connectionState {
+        case .disconnected:
+            return "Disconnected"
+        case .connecting:
+            return "Connecting..."
+        case .connected:
+            return session.isInitialized ? "Connected + Initialized" : "Connected"
+        case .failed(let message):
+            return "Failed: \(message)"
+        }
+    }
+
+    var isConnected: Bool {
+        session.isConnected
+    }
+
+    var requestJSON: String {
+        session.lastRequestJSON
+    }
+
+    var responseJSON: String {
+        session.lastResponseJSON
+    }
 
     func connectAndInitialize() async {
         guard isBusy == false else { return }
 
-        guard let url = URL(string: serverURL),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "ws" || scheme == "wss" else {
-            connectionStatusText = "Failed: invalid websocket URL"
-            responseJSON = EndpointJSONFormatter.genericErrorJSON("Invalid websocket URL: \(serverURL)")
+        isBusy = true
+        defer { isBusy = false }
+
+        await session.connect()
+        guard session.isConnected else {
+            if case .failed(let message) = session.connectionState {
+                appendEvent("error: \(message)")
+            }
             return
         }
 
-        isBusy = true
-        connectionStatusText = "Connecting..."
-
-        let params = InitializeParams(
+        let initialization = await session.invokeInitialize(
             clientInfo: ClientInfo(
                 name: "swiftcodex_sample",
                 title: "SwiftCodex Sample Integration",
@@ -40,101 +71,48 @@ final class SDKSampleIntegrationModel {
             capabilities: ClientCapabilities(experimentalApi: true)
         )
 
-        do {
-            let paramsJSON = try JSONValueCoding.encode(params)
-            requestJSON = EndpointJSONFormatter.requestJSON(
-                method: AppServerMethod.initialize.rawValue,
-                params: paramsJSON
-            )
-
-            try await client.connectWebSocket(url: url)
-            startInboundLogging()
-
-            let result = try await client.initialize(params)
-            try client.initialized()
-
-            let resultJSON = try JSONValueCoding.encode(result)
-            responseJSON = EndpointJSONFormatter.responseJSON(
-                result: resultJSON,
-                initializationAcknowledged: true
-            )
-
-            isConnected = true
-            connectionStatusText = "Connected"
+        if initialization.success {
             appendEvent("initialized")
-        } catch {
-            isConnected = false
-            connectionStatusText = "Failed"
-            responseJSON = EndpointJSONFormatter.genericErrorJSON(error.localizedDescription)
-            appendEvent("error: \(error.localizedDescription)")
+        } else {
+            appendEvent("error: \(initialization.errorMessage ?? "unknown error")")
         }
-
-        isBusy = false
     }
 
     func listModels() async {
         guard isBusy == false else { return }
         guard isConnected else {
-            responseJSON = EndpointJSONFormatter.genericErrorJSON("Not connected")
+            session.lastResponseJSON = EndpointJSONFormatter.genericErrorJSON("Not connected")
             return
         }
 
         isBusy = true
+        defer { isBusy = false }
 
-        do {
-            let params = ModelListParams(includeHidden: true)
-            let paramsJSON = try JSONValueCoding.encode(params)
-            requestJSON = EndpointJSONFormatter.requestJSON(
-                method: AppServerMethod.modelList.rawValue,
-                params: paramsJSON
-            )
-
-            let result = try await client.modelList(params)
-            modelIDs = result.data.compactMap(\.id).sorted()
-
-            let resultJSON = try JSONValueCoding.encode(result)
-            responseJSON = EndpointJSONFormatter.responseJSON(result: resultJSON)
+        let modelList = await session.invokeModelList(includeHidden: true)
+        if modelList.invocation.success {
+            modelIDs = modelList.modelIDs
             appendEvent("model/list completed")
-        } catch {
-            responseJSON = EndpointJSONFormatter.genericErrorJSON(error.localizedDescription)
-            appendEvent("error: \(error.localizedDescription)")
+        } else {
+            appendEvent("error: \(modelList.invocation.errorMessage ?? "unknown error")")
         }
-
-        isBusy = false
     }
 
     func disconnect() {
-        inboundTask?.cancel()
-        inboundTask = nil
-
-        client.disconnect()
-
-        isConnected = false
+        session.disconnect()
         isBusy = false
-        connectionStatusText = "Disconnected"
         appendEvent("disconnected")
     }
 
-    private func startInboundLogging() {
-        inboundTask?.cancel()
-
-        inboundTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            for await message in client.inboundMessages {
-                switch message {
-                case .notification(let notification):
-                    appendEvent("notification: \(notification.method.rawValue)")
-                case .request(let request):
-                    appendEvent("request: \(request.method.rawValue)")
-                case .stderr(let line):
-                    appendEvent("stderr: \(line)")
-                case .disconnected(let exitCode):
-                    isConnected = false
-                    connectionStatusText = "Disconnected"
-                    appendEvent("connection closed: \(exitCode.map(String.init) ?? "n/a")")
-                }
-            }
+    private func handleInboundMessage(_ message: AppServerInboundMessage) {
+        switch message {
+        case .notification(let notification):
+            appendEvent("notification: \(notification.method.rawValue)")
+        case .request(let request):
+            appendEvent("request: \(request.method.rawValue)")
+        case .stderr(let line):
+            appendEvent("stderr: \(line)")
+        case .disconnected(let exitCode):
+            appendEvent("connection closed: \(exitCode.map(String.init) ?? "n/a")")
         }
     }
 
