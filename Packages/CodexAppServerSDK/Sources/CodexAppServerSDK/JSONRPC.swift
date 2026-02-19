@@ -54,7 +54,7 @@ public enum CodexAppServerError: Error, Sendable {
     case terminated(Int32)
 }
 
-public struct AnyEncodable: Encodable {
+public struct AnyEncodable: Encodable, @unchecked Sendable {
     private let encodeImpl: (Encoder) throws -> Void
 
     public init<T: Encodable>(_ value: T) {
