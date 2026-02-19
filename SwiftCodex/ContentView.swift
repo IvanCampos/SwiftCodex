@@ -71,11 +71,33 @@ struct ContentView: View {
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .overlay(alignment: .bottom) {
+            disclaimerFooter
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+        }
         .onDisappear {
             copyConfirmationTask?.cancel()
             copyConfirmationTask = nil
             copyConfirmationMessage = nil
         }
+    }
+
+    private var disclaimerFooter: some View {
+        HStack {
+            Spacer()
+            Text("SwiftCodex is an open source project.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if let disclaimerURL = URL(string: "https://github.com/IvanCampos/SwiftCodex") {
+                Link("github.com/IvanCampos/SwiftCodex", destination: disclaimerURL)
+                    .font(.caption2.weight(.semibold))
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
     }
 
     private var backgroundLayer: some View {
