@@ -1,6 +1,6 @@
 # SwiftCodex
 
-<img width="1165" height="786" alt="image" src="https://github.com/user-attachments/assets/f1bc98bc-d36e-45c1-9291-250e3d52ec18" />
+<img width="1313" height="878" alt="image" src="https://github.com/user-attachments/assets/037c035e-4436-41a4-b208-dacc5fdf317a" />
 
 Before using the endpoint harness in `ContentView`, start the Codex app-server.
 
