@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "scx_front.png",
       "idiom" : "vision",
       "scale" : "2x"
     }

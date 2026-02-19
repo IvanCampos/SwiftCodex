@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "scx_back.png",
       "idiom" : "vision",
       "scale" : "2x"
     }

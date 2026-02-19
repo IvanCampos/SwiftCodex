@@ -16,14 +16,17 @@ struct ImmersiveView: View {
     @State private var requestTextInteractionEntity = Entity()
     @State private var responseTextInteractionEntity = Entity()
 
-    private let panelWidthPoints: CGFloat = 980
-    private let requestPanelHeightPoints: CGFloat = 420
+    private let responsePanelWidthPoints: CGFloat = 2940
+    private let requestPanelWidthPoints: CGFloat = 784
+    private let requestPanelHeightPoints: CGFloat = 483
     private let responseMinimumPanelHeightPoints: CGFloat = 1800
     private let responseMaximumPanelHeightPoints: CGFloat = 6000
     private let responseEstimatedCharactersPerLine = 86
     private let responseEstimatedLineHeightPoints: CGFloat = 20
     private let responseVerticalPaddingPoints: CGFloat = 120
-    private let manipulationHandleSize = SIMD3<Float>(0.72, 0.18, 0.30)
+    private let requestManipulationHandleSize = SIMD3<Float>(0.72, 0.18, 0.30)
+    private let responseManipulationHandleSize = SIMD3<Float>(2.16, 0.54, 0.90)
+    private let panelContentPaddingPoints: CGFloat = 20
     private let panelDragHandleWidthPoints: CGFloat = 220
     private let panelDragHandleHeightPoints: CGFloat = 14
     private let requestPanelAnchorPosition = SIMD3<Float>(-1.60, 1.05, -1.10)
@@ -45,24 +48,30 @@ struct ImmersiveView: View {
                 requestTextEntity,
                 title: "Request",
                 content: requestDisplayText,
+                panelWidthPoints: requestPanelWidthPoints,
                 panelHeightPoints: requestPanelHeightPoints
             )
             configureTextEntity(
                 responseTextEntity,
                 title: "Response",
                 content: responseDisplayText,
+                panelWidthPoints: responsePanelWidthPoints,
                 panelHeightPoints: responsePanelHeightPoints
             )
             configureInteractionEntity(
                 requestTextInteractionEntity,
                 at: requestPanelAnchorPosition,
                 textEntity: requestTextEntity,
+                textContent: requestDisplayText,
+                manipulationHandleSize: requestManipulationHandleSize,
                 panelHeightPoints: requestPanelHeightPoints
             )
             configureInteractionEntity(
                 responseTextInteractionEntity,
                 at: responsePanelAnchorPosition,
                 textEntity: responseTextEntity,
+                textContent: responseDisplayText,
+                manipulationHandleSize: responseManipulationHandleSize,
                 panelHeightPoints: responsePanelHeightPoints
             )
 
@@ -78,24 +87,30 @@ struct ImmersiveView: View {
                 requestTextEntity,
                 title: "Request",
                 content: requestDisplayText,
+                panelWidthPoints: requestPanelWidthPoints,
                 panelHeightPoints: requestPanelHeightPoints
             )
             configureTextEntity(
                 responseTextEntity,
                 title: "Response",
                 content: responseDisplayText,
+                panelWidthPoints: responsePanelWidthPoints,
                 panelHeightPoints: responsePanelHeightPoints
             )
             configureInteractionEntity(
                 requestTextInteractionEntity,
                 at: requestPanelAnchorPosition,
                 textEntity: requestTextEntity,
+                textContent: requestDisplayText,
+                manipulationHandleSize: requestManipulationHandleSize,
                 panelHeightPoints: requestPanelHeightPoints
             )
             configureInteractionEntity(
                 responseTextInteractionEntity,
                 at: responsePanelAnchorPosition,
                 textEntity: responseTextEntity,
+                textContent: responseDisplayText,
+                manipulationHandleSize: responseManipulationHandleSize,
                 panelHeightPoints: responsePanelHeightPoints
             )
         }
@@ -105,11 +120,13 @@ struct ImmersiveView: View {
         _ entity: Entity,
         title: String,
         content: String,
+        panelWidthPoints: CGFloat,
         panelHeightPoints: CGFloat
     ) {
         let newSnapshot = ImmersiveTextSnapshotComponent(
             title: title,
             content: content,
+            panelWidthPoints: panelWidthPoints,
             panelHeightPoints: panelHeightPoints
         )
         if entity.components[ImmersiveTextSnapshotComponent.self] == newSnapshot {
@@ -129,6 +146,7 @@ struct ImmersiveView: View {
                     content: content,
                     panelWidthPoints: panelWidthPoints,
                     panelHeightPoints: panelHeightPoints,
+                    contentPaddingPoints: panelContentPaddingPoints,
                     dragHandleWidthPoints: panelDragHandleWidthPoints,
                     dragHandleHeightPoints: panelDragHandleHeightPoints
                 )
@@ -140,10 +158,22 @@ struct ImmersiveView: View {
         _ interactionEntity: Entity,
         at position: SIMD3<Float>,
         textEntity: Entity,
+        textContent: String,
+        manipulationHandleSize: SIMD3<Float>,
         panelHeightPoints: CGFloat
     ) {
+        let interactionSnapshot = ImmersiveInteractionSnapshotComponent(
+            textHash: textContent.hashValue,
+            panelHeightPoints: panelHeightPoints,
+            manipulationHandleSize: manipulationHandleSize
+        )
+        let needsCollisionRefresh = interactionEntity.components[ImmersiveInteractionSnapshotComponent.self] != interactionSnapshot
+
         if interactionEntity.parent == nil {
             interactionEntity.position = position
+        }
+
+        if interactionEntity.parent == nil || needsCollisionRefresh {
             interactionEntity.components.set(
                 CollisionComponent(
                     shapes: [ShapeResource.generateBox(size: manipulationHandleSize)]
@@ -151,6 +181,7 @@ struct ImmersiveView: View {
             )
             interactionEntity.components.set(InputTargetComponent())
             interactionEntity.components.set(ManipulationComponent())
+            interactionEntity.components.set(interactionSnapshot)
         }
 
         if textEntity.parent !== interactionEntity {
@@ -164,19 +195,17 @@ struct ImmersiveView: View {
     }
 
     private func textOffsetFromTopCenter(
-        textEntity: Entity,
+        textEntity _: Entity,
         fallbackPanelHeightPoints: CGFloat
     ) -> SIMD3<Float> {
-        if let attachment = textEntity.components[ViewAttachmentComponent.self] {
-            let panelHeightMeters = attachment.bounds.extents.y
-            if panelHeightMeters > 0 {
-                return SIMD3<Float>(0, -panelHeightMeters * 0.5, 0)
-            }
-        }
+        let dragHandleCenterOffsetPoints = panelContentPaddingPoints + (panelDragHandleHeightPoints * 0.5)
 
-        // Temporary fallback before bounds become available.
-        let fallbackPanelHeightMeters = Float(fallbackPanelHeightPoints) / 1_200.0
-        return SIMD3<Float>(0, -fallbackPanelHeightMeters * 0.5, 0)
+        // Keep the mapping deterministic on every text update so the collision center
+        // (interaction entity origin) stays aligned with the drag handle center.
+        let panelHeightMeters = Float(fallbackPanelHeightPoints) / 1_200.0
+        let metersPerPoint = panelHeightMeters / Float(fallbackPanelHeightPoints)
+        let dragHandleCenterOffsetMeters = Float(dragHandleCenterOffsetPoints) * metersPerPoint
+        return SIMD3<Float>(0, (-panelHeightMeters * 0.5) + dragHandleCenterOffsetMeters, 0)
     }
 
     private func dynamicResponsePanelHeight(for responseText: String) -> CGFloat {
@@ -207,7 +236,14 @@ struct ImmersiveView: View {
 private struct ImmersiveTextSnapshotComponent: Component, Equatable {
     let title: String
     let content: String
+    let panelWidthPoints: CGFloat
     let panelHeightPoints: CGFloat
+}
+
+private struct ImmersiveInteractionSnapshotComponent: Component, Equatable {
+    let textHash: Int
+    let panelHeightPoints: CGFloat
+    let manipulationHandleSize: SIMD3<Float>
 }
 
 private struct ImmersiveTextAttachmentView: View {
@@ -215,6 +251,7 @@ private struct ImmersiveTextAttachmentView: View {
     let content: String
     let panelWidthPoints: CGFloat
     let panelHeightPoints: CGFloat
+    let contentPaddingPoints: CGFloat
     let dragHandleWidthPoints: CGFloat
     let dragHandleHeightPoints: CGFloat
 
@@ -234,7 +271,7 @@ private struct ImmersiveTextAttachmentView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(20)
+        .padding(contentPaddingPoints)
         .frame(width: panelWidthPoints, height: panelHeightPoints, alignment: .topLeading)
         .background(Color.black.opacity(0.50), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
