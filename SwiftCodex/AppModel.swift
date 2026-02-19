@@ -33,6 +33,9 @@ class AppModel {
     var logsNewestFirst: [EndpointLogEntry] = []
     var activeThreadID: String?
     var activeTurnID: String?
+    var lastResponseWasSuccess: Bool?
+    var lastResponseWasWarning = false
+    var responseGuidanceMessage: String?
 
     private let maxLogCount = 300
     private var logByID: [EndpointLogEntry.ID: EndpointLogEntry] = [:]
@@ -105,6 +108,9 @@ class AppModel {
         logByID.removeAll()
         lastRequestJSON = ""
         lastResponseJSON = ""
+        lastResponseWasSuccess = nil
+        lastResponseWasWarning = false
+        responseGuidanceMessage = nil
         selectedEndpoint = nil
     }
 
@@ -117,6 +123,10 @@ class AppModel {
             activeTurnID: activeTurnID
         )
         let invocation = await endpointSession.invoke(method: method, params: params)
+        lastResponseWasSuccess = invocation.success
+        let responseGuidance = guidance(for: invocation)
+        lastResponseWasWarning = responseGuidance.isWarning
+        responseGuidanceMessage = responseGuidance.message
 
         if let result = invocation.result {
             syncTrackingIDs(from: method, result: result)
@@ -244,5 +254,53 @@ class AppModel {
         if method == .reviewStart, let reviewThreadID = payload["reviewThreadId"]?.stringValue {
             activeThreadID = reviewThreadID
         }
+    }
+
+    private func guidance(for invocation: EndpointInvocationResult) -> (message: String?, isWarning: Bool) {
+        guard invocation.success == false else { return (nil, false) }
+
+        let candidates = [
+            invocation.errorMessage,
+            extractErrorMessage(from: invocation.responseJSON)
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+
+        for message in candidates {
+            let normalized = message.lowercased()
+
+            if normalized.contains("not connected to app-server") || normalized == "not connected." {
+                return ("You are not connected to the app-server. Enter a server URL and tap Connect.", false)
+            }
+
+            if normalized.contains("already initialized") {
+                return ("This can be ignored, as initialize endpoint has already been called.", true)
+            }
+
+            if normalized.contains("not initialized") {
+                return ("The server is not initialized. Call the initialize endpoint first.", false)
+            }
+        }
+
+        return (nil, false)
+    }
+
+    private func extractErrorMessage(from responseJSON: String) -> String? {
+        guard let data = responseJSON.data(using: .utf8),
+              let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let errorNode = jsonObject["error"] else {
+            return nil
+        }
+
+        if let errorString = errorNode as? String {
+            return errorString
+        }
+
+        if let errorObject = errorNode as? [String: Any],
+           let message = errorObject["message"] as? String {
+            return message
+        }
+
+        return nil
     }
 }

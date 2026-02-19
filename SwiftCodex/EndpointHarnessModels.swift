@@ -94,6 +94,97 @@ enum EndpointJSONFormatter {
     }
 }
 
+enum EndpointMethodCatalog {
+    static let apiOverviewURLString = "https://developers.openai.com/codex/app-server/#api-overview"
+
+    static func description(for method: AppServerMethod) -> String? {
+        switch method {
+        case .initialize:
+            return "Initialize once per connection, then send the initialized notification before invoking other methods."
+        case .threadStart:
+            return "Create a new thread and subscribe to turn/item events for that thread."
+        case .threadResume:
+            return "Reopen an existing thread by id so later turns continue in that thread."
+        case .threadFork:
+            return "Fork an existing thread into a new thread id using copied history."
+        case .threadList:
+            return "List stored thread logs with cursor pagination and optional filters."
+        case .threadLoadedList:
+            return "List thread ids currently loaded in memory."
+        case .threadRead:
+            return "Read a stored thread by id without resuming it."
+        case .threadArchive:
+            return "Archive a thread by moving its log into the archived directory."
+        case .threadNameSet:
+            return "Set or rename a thread's display name."
+        case .threadUnarchive:
+            return "Restore an archived thread back to active sessions."
+        case .threadCompactStart:
+            return "Start server-side compaction and create a compacted child thread."
+        case .threadBackgroundTerminalsClean:
+            return "Terminate and reap completed background terminal commands for a thread."
+        case .threadRollback:
+            return "Rollback the latest turn and related trailing user messages from a thread."
+        case .turnStart:
+            return "Start a new turn in a thread with user input."
+        case .turnSteer:
+            return "Append additional user input to an in-flight turn."
+        case .turnInterrupt:
+            return "Request cancellation of a running turn."
+        case .reviewStart:
+            return "Run a review against a target and return review results."
+        case .commandExec:
+            return "Execute one shell command and return stdout, stderr, and exit code."
+        case .modelList:
+            return "List models available to the current account/provider configuration."
+        case .experimentalFeatureList:
+            return "List experimental features and their enabled state."
+        case .collaborationModeList:
+            return "List collaboration mode presets."
+        case .skillsList:
+            return "List skills for one or more working directories."
+        case .skillsRemoteList:
+            return nil
+        case .skillsRemoteExport:
+            return nil
+        case .appList:
+            return "List available apps/connectors with pagination and accessibility metadata."
+        case .skillsConfigWrite:
+            return "Enable or disable a skill by file path."
+        case .mcpServerOAuthLogin:
+            return "Start OAuth login for a configured MCP server."
+        case .toolRequestUserInput:
+            return "Prompt the user with short questions for an approval/tool-input flow."
+        case .configMCPServerReload:
+            return "Reload MCP server configuration from disk and refresh loaded threads."
+        case .mcpServerStatusList:
+            return "List MCP servers, tools/resources, and auth status."
+        case .windowsSandboxSetupStart:
+            return nil
+        case .feedbackUpload:
+            return "Upload a feedback report with classification and optional context."
+        case .configRead:
+            return "Read the effective configuration after applying config layering."
+        case .configValueWrite:
+            return "Write a single configuration key/value to user config."
+        case .configBatchWrite:
+            return "Apply multiple configuration edits atomically."
+        case .configRequirementsRead:
+            return "Read requirements from requirements.toml and/or MDM policies."
+        case .accountRead:
+            return "Read current account/auth state and optionally refresh tokens."
+        case .accountLoginStart:
+            return "Start login for apiKey, chatgpt, or externally managed ChatGPT tokens."
+        case .accountLoginCancel:
+            return "Cancel a pending ChatGPT login by login id."
+        case .accountLogout:
+            return "Log out and clear active auth mode."
+        case .accountRateLimitsRead:
+            return "Read ChatGPT account rate limits."
+        }
+    }
+}
+
 enum EndpointRequestFactory {
     static func makeParams(for method: AppServerMethod, activeThreadID: String?, activeTurnID: String?) -> JSONValue? {
         let threadID = activeThreadID ?? "thr_test_missing"

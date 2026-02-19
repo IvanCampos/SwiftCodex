@@ -7,12 +7,17 @@
 
 import SwiftUI
 import CodexAppServerSDK
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
 
     @State private var endpointFilter = ""
     @State private var selectedLogID: EndpointLogEntry.ID?
+    @State private var copyConfirmationMessage: String?
+    @State private var copyConfirmationTask: Task<Void, Never>?
 
     private var endpointColumns: [GridItem] {
         [GridItem(.adaptive(minimum: 190, maximum: 280), spacing: 10)]
@@ -33,6 +38,27 @@ struct ContentView: View {
         appModel.logEntry(id: selectedLogID)
     }
 
+    private var selectedEndpointDescription: String? {
+        guard let endpoint = appModel.selectedEndpoint else { return nil }
+        return EndpointMethodCatalog.description(for: endpoint)
+    }
+
+    private var endpointSelectionColor: Color {
+        Color(red: 0.0, green: 1.0, blue: 127.0 / 255.0)
+    }
+
+    private var successfulResponseBackgroundColor: Color {
+        Color(red: 0.0, green: 1.0, blue: 127.0 / 255.0)
+    }
+
+    private var warningResponseBackgroundColor: Color {
+        Color(red: 247.0 / 255.0, green: 219.0 / 255.0, blue: 79.0 / 255.0)
+    }
+
+    private var errorResponseBackgroundColor: Color {
+        Color(red: 1.0, green: 4.0 / 255.0, blue: 0.0)
+    }
+
     var body: some View {
         ZStack {
             backgroundLayer
@@ -44,6 +70,11 @@ struct ContentView: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .onDisappear {
+            copyConfirmationTask?.cancel()
+            copyConfirmationTask = nil
+            copyConfirmationMessage = nil
         }
     }
 
@@ -183,6 +214,8 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
+            selectedEndpointOverviewCard
+
             if filteredEndpoints.isEmpty {
                 Text("No endpoint matches your filter.")
                     .font(.footnote)
@@ -223,14 +256,48 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSelected ? Color.blue.opacity(0.20) : Color.white.opacity(0.22))
+                    .fill(isSelected ? endpointSelectionColor.opacity(0.20) : Color.white.opacity(0.22))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(isSelected ? Color.blue.opacity(0.70) : Color.white.opacity(0.28), lineWidth: 1)
+                    .strokeBorder(isSelected ? endpointSelectionColor.opacity(0.70) : Color.white.opacity(0.28), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private var selectedEndpointOverviewCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Selected Endpoint")
+                .font(.subheadline.weight(.semibold))
+
+            if let endpoint = appModel.selectedEndpoint {
+                Text(endpoint.rawValue)
+                    .font(.system(.footnote, design: .monospaced))
+                    .foregroundStyle(.primary)
+
+                Text(selectedEndpointDescription ?? "No API overview description is currently available for this endpoint.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let docsURL = URL(string: EndpointMethodCatalog.apiOverviewURLString) {
+                    Link("Open API Overview", destination: docsURL)
+                        .font(.caption.weight(.semibold))
+                }
+            } else {
+                Text("Select an endpoint to view its API overview description.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+        }
     }
 
     private var inspectorStack: some View {
@@ -247,8 +314,51 @@ struct ContentView: View {
                 .font(.title3.weight(.semibold))
 
             HStack(alignment: .top, spacing: 10) {
-                jsonPanel(title: "Request", content: appModel.lastRequestJSON, emptyState: "No request yet.")
-                jsonPanel(title: "Response", content: appModel.lastResponseJSON, emptyState: "No response yet.")
+                jsonPanel(
+                    title: "Request",
+                    copySubject: "request",
+                    content: appModel.lastRequestJSON,
+                    emptyState: "No request yet.",
+                    backgroundColor: Color.black.opacity(0.07),
+                    contentColor: .primary
+                )
+                jsonPanel(
+                    title: "Response",
+                    copySubject: "response",
+                    content: appModel.lastResponseJSON,
+                    emptyState: "No response yet.",
+                    backgroundColor: appModel.lastResponseWasSuccess == true
+                        ? successfulResponseBackgroundColor
+                        : (appModel.lastResponseWasWarning
+                            ? warningResponseBackgroundColor
+                            : (appModel.lastResponseWasSuccess == false
+                            ? errorResponseBackgroundColor
+                            : Color.black.opacity(0.07))),
+                    contentColor: (appModel.lastResponseWasSuccess == true || appModel.lastResponseWasWarning)
+                        ? .black
+                        : .primary
+                )
+            }
+
+            if let copyConfirmationMessage {
+                Label(copyConfirmationMessage, systemImage: "checkmark.circle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(successfulResponseBackgroundColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            if let guidanceMessage = appModel.responseGuidanceMessage {
+                Label(guidanceMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(
+                        (appModel.lastResponseWasWarning ? warningResponseBackgroundColor : errorResponseBackgroundColor).opacity(0.85),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
             }
         }
         .padding(16)
@@ -261,23 +371,71 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func jsonPanel(title: String, content: String, emptyState: String) -> some View {
+    private func jsonPanel(
+        title: String,
+        copySubject: String,
+        content: String,
+        emptyState: String,
+        backgroundColor: Color,
+        contentColor: Color
+    ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Button {
+                    copyPanelContent(content, subject: copySubject)
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(content.isEmpty)
+            }
 
             ScrollView {
                 Text(content.isEmpty ? emptyState : content)
                     .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(content.isEmpty ? .secondary : .primary)
+                    .foregroundStyle(content.isEmpty ? .secondary : contentColor)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .padding(10)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(backgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func copyToClipboard(_ text: String) {
+#if canImport(UIKit)
+        UIPasteboard.general.string = text
+#endif
+    }
+
+    @MainActor
+    private func copyPanelContent(_ text: String, subject: String) {
+        guard text.isEmpty == false else { return }
+        copyToClipboard(text)
+        showCopyConfirmation(for: subject)
+    }
+
+    @MainActor
+    private func showCopyConfirmation(for subject: String) {
+        copyConfirmationMessage = "Copied \(subject)."
+        copyConfirmationTask?.cancel()
+        copyConfirmationTask = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard Task.isCancelled == false else { return }
+            await MainActor.run {
+                copyConfirmationMessage = nil
+                copyConfirmationTask = nil
+            }
+        }
     }
 
     private var activityCard: some View {
