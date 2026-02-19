@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CodexAppServerSDK
 
 enum EndpointConnectionState: Equatable {
     case disconnected

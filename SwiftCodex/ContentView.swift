@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CodexAppServerSDK
 
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel

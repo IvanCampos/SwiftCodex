@@ -11,3 +11,7 @@
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
 .apdisk
+
+# SwiftPM package user/cache state
+**/.swiftpm/
+**/.build/

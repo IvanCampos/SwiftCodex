@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CodexAppServerSDK
 
 /// Maintains app-wide state
 @MainActor
