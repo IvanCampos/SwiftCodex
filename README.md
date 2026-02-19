@@ -4,6 +4,8 @@
 
 Before using the endpoint harness in `ContentView`, start the Codex app-server.
 
+After connecting from the app, call `initialize` first. Do not call other endpoints until `initialize` succeeds and the client sends `initialized`.
+
 ## Vision Pro Device (recommended)
 
 Start the server on your Mac and listen on all interfaces:
