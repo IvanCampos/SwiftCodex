@@ -11,6 +11,14 @@ import SwiftUI
 @MainActor
 @Observable
 class AppModel {
+    static let defaultWebSocketURL: String = {
+#if targetEnvironment(simulator)
+        return "ws://127.0.0.1:4500"
+#else
+        return "ws://10.0.0.8:4500"
+#endif
+    }()
+
     let immersiveSpaceID = "ImmersiveSpace"
     enum ImmersiveSpaceState {
         case closed
@@ -19,7 +27,7 @@ class AppModel {
     }
     var immersiveSpaceState = ImmersiveSpaceState.closed
 
-    var webSocketURL = "ws://10.0.0.8:4500"
+    var webSocketURL = defaultWebSocketURL
     var connectionState: EndpointConnectionState = .disconnected
     var isInitialized = false
     var selectedEndpoint: AppServerMethod?

@@ -104,7 +104,7 @@ struct ContentView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            TextField("ws://10.0.0.8:4500", text: Bindable(appModel).webSocketURL)
+            TextField("ws://host-or-ip:4500", text: Bindable(appModel).webSocketURL)
                 .textFieldStyle(.plain)
                 .font(.system(.callout, design: .monospaced))
                 .padding(.horizontal, 12)
