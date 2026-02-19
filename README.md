@@ -62,40 +62,6 @@ To switch to a remote package later:
 4. Add the remote package URL with a version rule (for example "Up to Next Major" from `0.1.0`).
 5. Keep module/product name `CodexAppServerSDK` so app imports do not change.
 
-## Package Reuse (macOS, iOS, iPadOS, visionOS)
-
-`CodexAppServerSDK` is reusable by any Swift app target on supported platforms:
-
-- macOS 13+
-- iOS 16+ (includes iPadOS apps)
-- visionOS 26+
-
-To reuse it in another app:
-
-1. In Xcode, open the app project/workspace.
-2. Go to `File > Add Package Dependencies...`.
-3. Add one of:
-   - local path: `Packages/CodexAppServerSDK`
-   - remote Git URL (after publishing)
-4. Add product `CodexAppServerSDK` to the target(s) that need it.
-5. Import in source files:
-
-```swift
-import CodexAppServerSDK
-```
-
-WebSocket sample integration now lives in:
-
-```text
-SwiftCodex/SDKSampleIntegrationView.swift
-```
-
-Open that file and run the `#Preview("SDK Sample")` preview to test:
-- connect + initialize
-- model/list request
-- inbound notifications/requests/stderr logging
-- disconnect
-
 ## References
 
 - https://developers.openai.com/codex/app-server/
