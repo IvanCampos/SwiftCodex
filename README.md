@@ -82,6 +82,18 @@ To reuse it in another app:
 import CodexAppServerSDK
 ```
 
+WebSocket sample integration now lives in:
+
+```text
+SwiftCodex/SDKSampleIntegrationView.swift
+```
+
+Open that file and run the `#Preview("SDK Sample")` preview to test:
+- connect + initialize
+- model/list request
+- inbound notifications/requests/stderr logging
+- disconnect
+
 ## References
 
 - https://developers.openai.com/codex/app-server/

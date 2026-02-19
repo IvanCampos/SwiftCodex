@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3BD58B442F46B09700017526 /* CodexAppServerSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 3BD58B462F46B09700017526 /* CodexAppServerSDK */; };
 		3BD58B2C2F46B09400017526 /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 3BD58B2B2F46B09400017526 /* RealityKitContent */; };
+		3BD58B442F46B09700017526 /* CodexAppServerSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 3BD58B462F46B09700017526 /* CodexAppServerSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -362,13 +362,13 @@
 /* End XCConfigurationList section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		3BD58B462F46B09700017526 /* CodexAppServerSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = CodexAppServerSDK;
-		};
 		3BD58B2B2F46B09400017526 /* RealityKitContent */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RealityKitContent;
+		};
+		3BD58B462F46B09700017526 /* CodexAppServerSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CodexAppServerSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
