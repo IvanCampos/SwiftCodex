@@ -326,6 +326,7 @@ struct ContentView: View {
                     title: "Response",
                     copySubject: "response",
                     content: appModel.lastResponseJSON,
+                    scrollResetToken: appModel.lastResponseRevision,
                     emptyState: "No response yet.",
                     backgroundColor: appModel.lastResponseWasSuccess == true
                         ? successfulResponseBackgroundColor
@@ -375,10 +376,13 @@ struct ContentView: View {
         title: String,
         copySubject: String,
         content: String,
+        scrollResetToken: Int? = nil,
         emptyState: String,
         backgroundColor: Color,
         contentColor: Color
     ) -> some View {
+        let topAnchorID = "\(title)-top-anchor"
+
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(title)
@@ -397,13 +401,23 @@ struct ContentView: View {
                 .disabled(content.isEmpty)
             }
 
-            ScrollView {
-                Text(content.isEmpty ? emptyState : content)
-                    .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(content.isEmpty ? .secondary : contentColor)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(10)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(topAnchorID)
+
+                    Text(content.isEmpty ? emptyState : content)
+                        .font(.system(.footnote, design: .monospaced))
+                        .foregroundStyle(content.isEmpty ? .secondary : contentColor)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(10)
+                }
+                .onChange(of: scrollResetToken) { _, _ in
+                    guard scrollResetToken != nil else { return }
+                    proxy.scrollTo(topAnchorID, anchor: .top)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(backgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

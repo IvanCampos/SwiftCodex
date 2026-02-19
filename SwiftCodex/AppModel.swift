@@ -35,6 +35,7 @@ class AppModel {
     var activeTurnID: String?
     var lastResponseWasSuccess: Bool?
     var lastResponseWasWarning = false
+    var lastResponseRevision = 0
     var responseGuidanceMessage: String?
 
     private let maxLogCount = 300
@@ -110,6 +111,7 @@ class AppModel {
         lastResponseJSON = ""
         lastResponseWasSuccess = nil
         lastResponseWasWarning = false
+        lastResponseRevision = 0
         responseGuidanceMessage = nil
         selectedEndpoint = nil
     }
@@ -124,6 +126,7 @@ class AppModel {
         )
         let invocation = await endpointSession.invoke(method: method, params: params)
         lastResponseWasSuccess = invocation.success
+        lastResponseRevision &+= 1
         let responseGuidance = guidance(for: invocation)
         lastResponseWasWarning = responseGuidance.isWarning
         responseGuidanceMessage = responseGuidance.message
@@ -271,6 +274,12 @@ class AppModel {
 
             if normalized.contains("not connected to app-server") || normalized == "not connected." {
                 return ("You are not connected to the app-server. Enter a server URL and tap Connect.", false)
+            }
+
+            if invocation.method == AppServerMethod.skillsRemoteList.rawValue
+                && (normalized.contains("failed to list remote skills")
+                    || (normalized.contains("status 403 forbidden") && normalized.contains("notallowed"))) {
+                return ("Remote skills are blocked for the current account/session (403 NotAllowed). Sign in with an account that has remote-skills access, or use skills/list for local skills.", false)
             }
 
             if normalized.contains("already initialized") {
