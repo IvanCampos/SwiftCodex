@@ -50,3 +50,4 @@ ws://127.0.0.1:4500
 
 - https://developers.openai.com/codex/app-server/
 - https://github.com/openai/codex/tree/main/codex-rs/app-server
+- https://openai.com/index/unlocking-the-codex-harness/
